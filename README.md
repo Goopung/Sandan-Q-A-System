@@ -1,47 +1,50 @@
 # KHU Sandan RAG Q&A System
 
-경희대학교 연구처/산학협력단 게시판 첨부자료를 수집하고, OpenAI + RAG로 질의응답 및 원본 파일 다운로드를 제공하는 Streamlit 시스템입니다.
+This project is a Streamlit-based RAG Q&A system designed to collect attachment files from Kyung Hee University Research Office / Industry-Academic Cooperation Foundation bulletin boards, extract textual content from the collected files, build a searchable knowledge base, and provide AI-powered question answering with original file download support.
 
-이 버전은 기존 Supabase Storage 의존도를 낮추기 위해 **Cloudflare R2 + LanceDB/Qdrant** 구조를 지원합니다.
+This version supports a **Cloudflare R2 + LanceDB/Qdrant** architecture in order to reduce dependency on Supabase Storage and provide a more scalable and cost-efficient storage structure.
 
-## 1. Recommended architecture
+## 1. Recommended Architecture
 
 ```text
-게시판 PDF/HWP/PPT/ZIP 원본 파일
+Original bulletin board attachments
+(PDF / HWP / PPT / ZIP)
         ↓
 Cloudflare R2
         ↓
-텍스트 추출 + chunking + embedding
+Text extraction + chunking + embedding
         ↓
-LanceDB 또는 Qdrant
+LanceDB or Qdrant
         ↓
-Streamlit Q&A / Search
-```
+Streamlit Q&A / Search Interface
+````
 
-- 원본 대용량 파일: Cloudflare R2
-- 벡터 검색: LanceDB 또는 Qdrant
-- 키워드 보조 검색: SQLite FTS
-- 답변 생성/임베딩: OpenAI
+* Original large files: Cloudflare R2
+* Vector search: LanceDB or Qdrant
+* Keyword-based auxiliary search: SQLite FTS
+* Answer generation and embeddings: OpenAI
 
-## 2. Backend modes
+## 2. Backend Modes
 
-`SANDAN_RAG_BACKEND` 값으로 선택합니다.
+The backend mode can be selected using the `SANDAN_RAG_BACKEND` environment variable.
 
-| Mode | Vector index | Original files | Recommended use |
-|---|---|---|---|
-| `local` | Chroma + SQLite FTS | local files, optional R2 | local development |
-| `lancedb` | LanceDB + SQLite FTS | Cloudflare R2 | low-cost prototype |
-| `qdrant` | Qdrant Cloud + optional SQLite FTS | Cloudflare R2 | cloud deployment |
-| `supabase` | Supabase pgvector | Cloudflare R2 if configured, otherwise Supabase Storage | pgvector + R2 migration |
+| Mode       | Vector Index                       | Original File Storage                                   | Recommended Use Case                       |
+| ---------- | ---------------------------------- | ------------------------------------------------------- | ------------------------------------------ |
+| `local`    | Chroma + SQLite FTS                | Local files, optional R2                                | Local development                          |
+| `lancedb`  | LanceDB + SQLite FTS               | Cloudflare R2                                           | Low-cost prototype                         |
+| `qdrant`   | Qdrant Cloud + optional SQLite FTS | Cloudflare R2                                           | Cloud deployment                           |
+| `supabase` | Supabase pgvector                  | Cloudflare R2 if configured, otherwise Supabase Storage | pgvector-based deployment and R2 migration |
 
-## 3. Cloudflare R2 setup
+## 3. Cloudflare R2 Setup
 
-1. Cloudflare Dashboard → `Storage & databases` → `R2 Object Storage` 진입
-2. R2 활성화
-3. Bucket 생성 예: `sandan-rag-files`
-4. `Manage R2 API Tokens` → `Create API token`
-5. 권한은 `Object Read & Write`, 범위는 해당 bucket 하나만 선택
-6. 아래 값을 `.env` 또는 Streamlit Secrets에 저장
+1. Go to the Cloudflare Dashboard.
+2. Navigate to `Storage & databases` → `R2 Object Storage`.
+3. Enable R2.
+4. Create a bucket, for example: `sandan-rag-files`.
+5. Go to `Manage R2 API Tokens` → `Create API Token`.
+6. Set the permission to `Object Read & Write`.
+7. Restrict the token scope to the target bucket only.
+8. Save the following values in `.env` or Streamlit Secrets.
 
 ```env
 R2_ACCOUNT_ID="your_cloudflare_account_id"
@@ -52,13 +55,15 @@ R2_ENDPOINT_URL="https://your_account_id.r2.cloudflarestorage.com"
 R2_SIGNED_URL_SECONDS="3600"
 ```
 
-R2 bucket은 private으로 두는 것을 권장합니다. 이 시스템은 다운로드 시 presigned URL을 생성합니다.
+It is recommended to keep the R2 bucket private.
+This system generates presigned URLs when users need to download original files.
 
-## 4. LanceDB mode
+## 4. LanceDB Mode
 
-가장 간단하고 비용이 적은 방식입니다. LanceDB는 별도 회원가입이 필요 없습니다.
+LanceDB is the simplest and most cost-efficient option for local or lightweight deployment.
+It does not require a separate cloud account.
 
-`.env` 예시:
+Example `.env` configuration:
 
 ```env
 OPENAI_API_KEY="sk-xxxx"
@@ -78,7 +83,7 @@ LANCEDB_PATH="data/lancedb"
 LANCEDB_TABLE_NAME="sandan_attachments"
 ```
 
-실행:
+Run the system:
 
 ```powershell
 python -m venv .venv
@@ -90,11 +95,12 @@ python scripts\build_index.py --force
 streamlit run app.py
 ```
 
-## 5. Qdrant mode
+## 5. Qdrant Mode
 
-Qdrant Cloud에 회원가입하고 Free Cluster를 만든 뒤 `Cluster URL`과 `Database API Key`를 저장합니다.
+Qdrant mode is recommended for cloud deployment.
+Create a free Qdrant Cloud cluster and save the `Cluster URL` and `Database API Key`.
 
-`.env` 예시:
+Example `.env` configuration:
 
 ```env
 OPENAI_API_KEY="sk-xxxx"
@@ -115,7 +121,7 @@ R2_BUCKET_NAME="sandan-rag-files"
 R2_ENDPOINT_URL="https://your_account_id.r2.cloudflarestorage.com"
 ```
 
-실행:
+Run the system:
 
 ```powershell
 python scripts\collect_data.py --max-pages 300
@@ -123,11 +129,12 @@ python scripts\build_index.py --force
 streamlit run app.py
 ```
 
-## 6. Supabase pgvector + Cloudflare R2 mode
+## 6. Supabase pgvector + Cloudflare R2 Mode
 
-Supabase를 벡터 DB(pgvector)로 계속 쓰되, 원본 대용량 파일은 Cloudflare R2에 저장할 수 있습니다. 이 방식에서는 Supabase Storage를 사용하지 않습니다.
+This mode allows you to continue using Supabase as the vector database through pgvector, while storing large original files in Cloudflare R2.
+In this configuration, Supabase Storage is not used for original file storage.
 
-`.env` 예시:
+Example `.env` configuration:
 
 ```env
 OPENAI_API_KEY="sk-xxxx"
@@ -148,43 +155,44 @@ R2_ENDPOINT_URL="https://your_account_id.r2.cloudflarestorage.com"
 R2_SIGNED_URL_SECONDS="3600"
 ```
 
-Supabase SQL Editor에서 `supabase/schema.sql`을 한 번 실행한 뒤 마이그레이션합니다.
+Before migration, run `supabase/schema.sql` once in the Supabase SQL Editor.
+
+Then migrate the local index to Supabase:
 
 ```powershell
 python scripts\collect_data.py --max-pages 300
 python scripts\migrate_local_to_supabase.py --force
 ```
 
-기존 Supabase Storage 방식으로만 사용하려면 `SANDAN_OBJECT_STORAGE`를 비워두고 `SUPABASE_BUCKET`을 설정하면 됩니다.
+To continue using the legacy Supabase Storage-only mode, leave `SANDAN_OBJECT_STORAGE` empty and configure `SUPABASE_BUCKET`.
 
+## 7. Useful Commands
 
-## 7. Useful commands
-
-진단:
+Run diagnostics:
 
 ```powershell
 python scripts\diagnose.py
 ```
 
-강제 재색인:
+Force rebuild the index:
 
 ```powershell
 python scripts\build_index.py --force
 ```
 
-원본 파일 업로드 없이 색인만 재생성:
+Rebuild the index without uploading original files:
 
 ```powershell
 python scripts\build_index.py --force --no-upload-files
 ```
 
-Streamlit 실행:
+Run Streamlit:
 
 ```powershell
 streamlit run app.py
 ```
 
-## 8. Streamlit Cloud Secrets example
+## 8. Streamlit Cloud Secrets Example
 
 ```toml
 OPENAI_API_KEY = "sk-xxxx"
@@ -206,10 +214,12 @@ R2_BUCKET_NAME = "sandan-rag-files"
 R2_ENDPOINT_URL = "https://xxxx.r2.cloudflarestorage.com"
 ```
 
-## 9. Important notes
+## 9. Important Notes
 
-- R2에는 원본 파일만 저장합니다.
-- LanceDB/Qdrant에는 chunk text, embedding, metadata, R2 object key가 저장됩니다.
-- R2 Secret Access Key는 한 번만 표시되므로 반드시 안전하게 저장하세요.
-- R2 bucket을 public으로 열 필요가 없습니다. private bucket + presigned URL 방식을 권장합니다.
-- Streamlit Cloud의 로컬 파일 시스템은 장기 저장소가 아니므로, 클라우드 배포는 `qdrant + r2` 조합을 권장합니다.
+* Cloudflare R2 stores only the original files.
+* LanceDB or Qdrant stores chunk text, embeddings, metadata, and R2 object keys.
+* The R2 Secret Access Key is displayed only once. Store it securely.
+* The R2 bucket does not need to be public. A private bucket with presigned URLs is recommended.
+* The local file system in Streamlit Cloud is not suitable for long-term persistent storage.
+* For cloud deployment, the recommended configuration is `qdrant + r2`.
+* For low-cost local development or prototyping, the recommended configuration is `lancedb + r2`.
